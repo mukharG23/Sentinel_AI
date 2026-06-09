@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Models (too large for Git)
+*.pt
+*.onnx
