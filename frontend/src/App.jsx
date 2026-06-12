@@ -47,14 +47,17 @@ function App() {
 
         // Draw each face box
         facesRef.current.forEach(face => {
-          ctx.strokeStyle = "#00FF00"   // bright green
+          const isKnown = face.confirmed === true
+          const color = isKnown ? "#00FF00" : "#FF0000"
+          const label = isKnown ? face.name : "Unknown"
+          ctx.strokeStyle = color
           ctx.lineWidth = 2
           ctx.strokeRect(face.x, face.y, face.width, face.height)
 
           // Label above the box
-          ctx.fillStyle = "#00FF00"
+          ctx.fillStyle = color
           ctx.font = "14px Arial"
-          ctx.fillText("Face", face.x, face.y - 5)
+          ctx.fillText(label, face.x, face.y - 5)
         })
       }
 

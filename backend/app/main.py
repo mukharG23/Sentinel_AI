@@ -93,18 +93,16 @@ def thread_b_face():
                     if len(encodings) > 0:
                         face_embedding = encodings[0]
 
-                        # Cosine similarity against every known embedding
-                        similarities = []
+                        # Euclidean distance against every known embedding
+                        distances = []
                         for known_emb in known_embeddings:
-                            sim = np.dot(face_embedding, known_emb) / (
-                                np.linalg.norm(face_embedding) * np.linalg.norm(known_emb)
-                            )
-                            similarities.append(sim)
+                            dist = np.linalg.norm(face_embedding - known_emb)
+                            distances.append(dist)
 
-                        best_idx = int(np.argmax(similarities))
-                        best_score = similarities[best_idx]
+                        best_idx = int(np.argmin(distances))
+                        best_score = distances[best_idx]
 
-                        if best_score > 0.6:
+                        if best_score < 0.6:
                             name = known_names[best_idx]
                             matched_names_this_frame.add(name)
 
