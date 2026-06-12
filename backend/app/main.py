@@ -54,6 +54,7 @@ class FrameData(BaseModel):
 # ── Thread B: Face Detection ──────────────────────────────────────────────
 def thread_b_face():
     frame_count = 0
+    consecutive_matches={}
 
     while True:
         try:
@@ -69,6 +70,8 @@ def thread_b_face():
         detection_results = face_detector.process(rgb_frame)
 
         boxes = []
+        matched_names_this_frame =set()
+
         if detection_results.detections:
             h, w = frame.shape[:2]
             for detection in detection_results.detections:
@@ -77,7 +80,47 @@ def thread_b_face():
                 y  = max(0, int(bbox.ymin * h))
                 bw = int(bbox.width * w)
                 bh = int(bbox.height * h)
-                boxes.append({"x": x, "y": y, "width": bw, "height": bh})
+                bw=min(bw,w-x)
+                bh=min(bh,h-y)
+                name="Unknown"
+                confirmed=False
+
+                if known_embeddings and bw>0 and bh>0:
+                    face_location=[(y,x+bw,y+bh,x)]
+                    encodings=face_recognition.face_encodings(
+                        rgb_frame, known_face_locations=face_location
+                    )
+                    if len(encodings) > 0:
+                        face_embedding = encodings[0]
+
+                        # Cosine similarity against every known embedding
+                        similarities = []
+                        for known_emb in known_embeddings:
+                            sim = np.dot(face_embedding, known_emb) / (
+                                np.linalg.norm(face_embedding) * np.linalg.norm(known_emb)
+                            )
+                            similarities.append(sim)
+
+                        best_idx = int(np.argmax(similarities))
+                        best_score = similarities[best_idx]
+
+                        if best_score > 0.6:
+                            name = known_names[best_idx]
+                            matched_names_this_frame.add(name)
+
+                            consecutive_matches[name] = consecutive_matches.get(name, 0) + 1
+                            if consecutive_matches[name] >= 3:
+                                confirmed = True
+
+                boxes.append({
+                    "x": x, "y": y, "width": bw, "height": bh,
+                    "name": name, "confirmed": confirmed
+                })
+
+        # Reset counters for names not matched this frame
+        for name in list(consecutive_matches.keys()):
+            if name not in matched_names_this_frame:
+                consecutive_matches[name] = 0
 
         with results_lock:
             results["faces"] = boxes
