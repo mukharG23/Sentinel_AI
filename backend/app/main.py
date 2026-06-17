@@ -104,6 +104,7 @@ app.add_middleware(
 KNOWN_FACES_PATH = "known_faces.json"
 KNOWN_FACES_DIR  = "known_faces"
 ATTENDANCE_DIR = "attendance"
+ZONES_PATH = "zones.json"
 
 frame_queue_face = queue.Queue(maxsize=5)
 frame_queue_yolo = queue.Queue(maxsize=5)
@@ -123,6 +124,14 @@ def load_known_faces():
 
 known_faces_data, known_names, known_embeddings = load_known_faces()
 
+def load_zones():
+    if not os.path.exists(ZONES_PATH):
+        return {}
+    with open(ZONES_PATH, "r") as f:
+        return json.load(f)
+
+zones_data = load_zones()
+
 #MediaPipe Setup
 mp_face = mp.solutions.face_detection
 face_detector = mp_face.FaceDetection(min_detection_confidence=0.6)
@@ -132,6 +141,12 @@ person_tracker = CentroidTracker(max_disappeared=10, max_distance=50)
 #Request Model
 class FrameData(BaseModel):
     frame: str
+class ZoneData(BaseModel):
+    name: str
+    x1: int
+    y1: int
+    x2: int
+    y2: int
 
 #Thread B: Face Detection
 def get_attendance_filepath():
@@ -281,9 +296,18 @@ def thread_c_yolo():
             {"id": obj_id, "centroid_x": centroid[0], "centroid_y": centroid[1]}
             for obj_id, centroid in tracked.items()
         ]
+        zone_counts = {}
+        for zone_name, zone in zones_data.items():
+            count = 0
+            for person in tracked_people:
+                px, py = person["centroid_x"], person["centroid_y"]
+                if zone["x1"] <= px <= zone["x2"] and zone["y1"] <= py <= zone["y2"]:
+                    count += 1
+            zone_counts[zone_name] = count
         with results_lock:
             results["objects"]=objects
             results["tracked_people"] = tracked_people
+            results["zone_counts"] = zone_counts
 
 #Start Threads on Startup 
 @app.on_event("startup")
@@ -382,3 +406,21 @@ def get_attendance():
     with attendance_lock:
         with open(filepath, "r") as f:
             return json.load(f)
+        
+@app.post("/zones")
+async def save_zone(zone: ZoneData):
+    global zones_data
+
+    zones_data[zone.name] = {
+        "x1": zone.x1, "y1": zone.y1,
+        "x2": zone.x2, "y2": zone.y2
+    }
+
+    with open(ZONES_PATH, "w") as f:
+        json.dump(zones_data, f, indent=2)
+
+    return {"status": "ok", "message": f"Zone '{zone.name}' saved"}
+
+@app.get("/zones")
+def get_zones():
+    return zones_data
