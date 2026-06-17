@@ -183,7 +183,7 @@ function App() {
   return (
     <div style={{ display: "flex", gap: "24px" }}>
       <div>
-        <h1>SentinelAI</h1>
+        <h1>OccuVision</h1>
         <div style={{ position: "relative", display: "inline-block" }}>
           <video
             ref={videoRef}
