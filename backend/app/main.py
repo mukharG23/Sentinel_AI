@@ -13,6 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from ultralytics import YOLO
+from dotenv import load_dotenv
+from groq import Groq
+
+
+load_dotenv()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 #Centroid Tracker
 class CentroidTracker:
@@ -176,6 +183,70 @@ def update_attendance(name):
 
         with open(filepath, "w") as f:
             json.dump(data, f, indent=2)
+last_narration_time = 0  # global timer for 10-second intervals
+
+def generate_scene_narration():
+    global last_narration_time
+    now = time.time()
+
+    if now - last_narration_time < 10:
+        return  # only narrate every 10 seconds
+
+    last_narration_time = now
+
+    with results_lock:
+        current_faces = results.get("faces", [])
+        current_objects = results.get("objects", [])
+        current_zones = results.get("zone_counts", {})
+
+    # Build text description of current scene
+    face_descriptions = []
+    for face in current_faces:
+        if face.get("confirmed") and face.get("name") != "Unknown":
+            face_descriptions.append(face["name"])
+        else:
+            face_descriptions.append("an unrecognized person")
+
+    object_descriptions = [
+        f"{obj['label']} ({int(obj['confidence']*100)}%)"
+        for obj in current_objects
+        if obj['label'] != 'person'  # skip 'person' since we cover that via faces
+    ]
+
+    zone_descriptions = [
+        f"'{zone}': {count} person(s)"
+        for zone, count in current_zones.items()
+    ]
+
+    prompt_parts = []
+    if face_descriptions:
+        prompt_parts.append(f"People detected: {', '.join(face_descriptions)}.")
+    else:
+        prompt_parts.append("No people currently detected.")
+
+    if object_descriptions:
+        prompt_parts.append(f"Objects in scene: {', '.join(object_descriptions)}.")
+
+    if zone_descriptions:
+        prompt_parts.append(f"Zone occupancy: {', '.join(zone_descriptions)}.")
+
+    prompt_parts.append("Describe this workplace scene in one concise sentence.")
+
+    prompt = " ".join(prompt_parts)
+
+    try:
+        response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100
+        )
+        narration = response.choices[0].message.content.strip()
+
+        with results_lock:
+            results["narration"] = narration
+
+    except Exception as e:
+        print(f"Groq API error: {e}")
 
 def thread_b_face():
     frame_count = 0
@@ -345,6 +416,7 @@ def thread_c_yolo():
             results["objects"]=objects
             results["tracked_people"] = tracked_people
             results["zone_counts"] = zone_counts
+        generate_scene_narration()
 
 #Start Threads on Startup 
 @app.on_event("startup")

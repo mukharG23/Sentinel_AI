@@ -9,12 +9,14 @@ function App() {
   const facesRef = useRef([])
   const objectsRef = useRef([])
   const zoneCountsRef = useRef({})
+  const dismissedAlertsRef = useRef(new Set())
   const [attendance, setAttendance] = useState({})
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 })
   const [drawCurrent, setDrawCurrent] = useState({ x: 0, y: 0 })
   const [zones, setZones] = useState({})
   const [alertsList, setAlertsList] = useState([])
+  const [narration, setNarration] = useState("")
 
   useEffect(() => {
     if (!isActive) return
@@ -25,7 +27,12 @@ function App() {
         facesRef.current = data.faces || []
         objectsRef.current = data.objects || []
         zoneCountsRef.current = data.zone_counts || {}
-        setAlertsList(data.alerts || [])
+        setAlertsList(
+          (data.alerts || []).filter(
+            alert => !dismissedAlertsRef.current.has(alert.timestamp)
+          )
+        )
+        if (data.narration) setNarration(data.narration)
       } catch (err) {}
     }, 500)
     return () => clearInterval(pollInterval)
@@ -101,7 +108,7 @@ function App() {
           ctx.fillStyle = "#FFD700"
           ctx.font = "14px Arial"
           const labelY = zone.y1 > 15 ? zone.y1 - 5 : zone.y1 + 15
-          ctx.fillText(`${name}: ${count}`,zone.x1, labelY)
+          ctx.fillText(`${name}: ${count}`, zone.x1, labelY)
         })
 
         if (isDrawing) {
@@ -227,6 +234,21 @@ function App() {
         <p style={{ color: "#666", fontSize: "13px" }}>
           Click and drag on the video to draw a zone.
         </p>
+
+        {/* Scene Narration */}
+        {narration && (
+          <div style={{
+            marginTop: "12px",
+            padding: "10px",
+            background: "#f0f4ff",
+            borderRadius: "6px",
+            border: "1px solid #c0d0ff",
+            maxWidth: "640px",
+            fontSize: "14px"
+          }}>
+            <strong>Scene:</strong> {narration}
+          </div>
+        )}
       </div>
 
       <div style={{ minWidth: "250px" }}>
@@ -249,9 +271,9 @@ function App() {
                 Last seen: {times.last_seen}
               </li>
             ))}
-
           </ul>
         )}
+
         <h2>Alerts</h2>
         {alertsList.length === 0 ? (
           <p>No alerts.</p>
@@ -260,11 +282,30 @@ function App() {
             {alertsList.map((alert, index) => (
               <li key={index} style={{
                 marginBottom: "8px",
-                padding: "10px",
+                padding: "10px 32px 10px 10px",
                 border: "1px solid #ff4444",
                 borderRadius: "6px",
-                backgroundColor: "#fff5f5"
+                backgroundColor: "#fff5f5",
+                position: "relative"
               }}>
+                <button
+                  onClick={() => {
+                    dismissedAlertsRef.current.add(alert.timestamp)
+                    setAlertsList(prev => prev.filter((_, i) => i !== index))
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: "8px",
+                    right: "10px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    color: "#ff4444",
+                    fontWeight: "bold",
+                    lineHeight: 1
+                  }}
+                >✕</button>
                 ⚠️ {alert.message}
                 <br />
                 <small style={{ color: "#888" }}>{alert.timestamp}</small>
